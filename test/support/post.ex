@@ -9,6 +9,7 @@ defmodule Scrivener.Ecto.Post do
     field :published, :boolean
 
     has_many :comments, Scrivener.Ecto.Comment
+    has_many :authors, through: [:comments, :author]
 
     timestamps
   end

@@ -1,7 +1,7 @@
 defmodule Scrivener.Paginator.Ecto.QueryTest do
   use Scrivener.Ecto.TestCase
 
-  alias Scrivener.Ecto.{Comment, KeyValue, Post}
+  alias Scrivener.Ecto.{Comment, KeyValue, Post, Author}
 
   defp create_posts do
     unpublished_post = %Post{
@@ -32,6 +32,32 @@ defmodule Scrivener.Paginator.Ecto.QueryTest do
         key: "key_#{i}",
         value: (rem(i, 2) |> to_string)
       } |> Scrivener.Ecto.Repo.insert!
+    end)
+  end
+
+  defp create_nested_posts do
+    posts = Enum.map(1..3, fn nr ->
+      %Post{
+        title: "Title #{nr}",
+        body: "Body #{nr}",
+        published: false
+      } |> Scrivener.Ecto.Repo.insert!
+    end)
+
+    authors = Enum.map(1..3, fn nr ->
+      %Author{
+        name: "Random Name #{nr}"
+      } |> Scrivener.Ecto.Repo.insert!
+    end)
+
+    Enum.each(authors, fn a ->
+      Enum.each(posts, fn p ->
+        %Comment{
+          body: "Body #{a.name} #{p.title}",
+          author_id: a.id,
+          post_id: p.id
+        } |> Scrivener.Ecto.Repo.insert!
+      end)
     end)
   end
 
@@ -184,6 +210,26 @@ defmodule Scrivener.Paginator.Ecto.QueryTest do
       assert page.page_number == 2
       assert page.entries == Enum.drop(posts, 4)
       assert page.total_pages == 2
+    end
+
+   test "can be used with nested joins" do
+      create_nested_posts
+
+      page = Post
+      |> join(:left, [p], c in assoc(p, :comments))
+      |> join(:left, [p, c], a in assoc(c, :author))
+      |> preload([p, c, a], [comments: [:author]])
+      |> order_by([p], desc: p.body)
+      |> Scrivener.Ecto.Repo.paginate(%{"page_size" => 2})
+
+      [first, second] = page.entries
+
+      assert Enum.count(page.entries) == 2
+      assert page.total_entries == 3
+      assert Enum.count(first.comments) == 3
+
+      assert first.body == "Body 3"
+      assert second.body == "Body 2"
     end
   end
 end
