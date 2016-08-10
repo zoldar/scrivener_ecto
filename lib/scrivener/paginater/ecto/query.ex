@@ -6,19 +6,21 @@ defimpl Scrivener.Paginater, for: Ecto.Query do
   @moduledoc false
 
   @spec paginate(Ecto.Query.t, Scrivener.Config.t) :: Scrivener.Page.t
-  def paginate(query, %Config{page_size: page_size, page_number: page_number, module: repo}) do
+  def paginate(query, %Config{page_size: page_size, page_number: page_number, module: repo, opts: opts}) do
     total_entries = total_entries(query, repo)
 
     %Page{
       page_size: page_size,
       page_number: page_number,
-      entries: entries(query, repo, page_number, page_size),
+      entries: entries(query, repo, page_number, page_size, opts),
       total_entries: total_entries,
       total_pages: total_pages(total_entries, page_size)
     }
   end
 
-  defp entries(query, repo, page_number, page_size) do
+  defp entries(query, repo, page_number, page_size, opts) do
+    join_query_fn = Keyword.get(opts || [], :join_query_fn, fn q -> q end)
+
     offset = page_size * (page_number - 1)
 
     if joins?(query) do
@@ -26,6 +28,7 @@ defimpl Scrivener.Paginater, for: Ecto.Query do
       |> remove_clauses
       |> select([x], {x.id})
       |> group_by([x], x.id)
+      |> join_query_fn.()
       |> offset([_], ^offset)
       |> limit([_], ^page_size)
       |> repo.all
